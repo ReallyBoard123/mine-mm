@@ -1,45 +1,65 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
-import { ConsolidatedMeasurement, DataUpload } from "./api";
+import { ConsolidatedMeasurement, DataUpload } from "@/lib/api";
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+/**
+ * Maps set letters to their base sensor numbers
+ */
+export const SET_LETTER_MAP: Record<string, number> = {
+  'A': 768, 'B': 771, 'C': 774, 'D': 777,
+  'E': 780, 'F': 783, 'G': 786, 'H': 789
+};
+
+/**
+ * Interface for sensor information
+ */
+export interface SensorInfo {
+  missing: string[];
+  uploaded: string[];
 }
 
-// Helper function to identify missing sensors for a measurement
-const identifyMissingSensors = (
+/**
+ * Interface for a sensor
+ */
+export interface Sensor {
+  type: string;
+  number: number;
+}
+
+/**
+ * Get expected sensors for a set
+ */
+export const getExpectedSensors = (setName: string): Sensor[] => {
+  const [setNumber, setLetter] = setName.split('-');
+  if (!setNumber || !setLetter || !SET_LETTER_MAP[setLetter]) {
+    return [];
+  }
+  
+  const sensorBaseNumber = SET_LETTER_MAP[setLetter];
+  
+  return [
+    { type: "Left Sensor", number: sensorBaseNumber },
+    { type: "Middle Sensor", number: sensorBaseNumber + 1 },
+    { type: "Right Sensor", number: sensorBaseNumber + 2 }
+  ];
+};
+
+/**
+ * Identify missing sensors for a measurement
+ */
+export const identifyMissingSensors = (
   measurement: ConsolidatedMeasurement,
   uploads: DataUpload[] | undefined
-): { missing: string[], uploaded: string[] } => {
+): SensorInfo => {
   if (!measurement || !measurement.imu_set || !uploads || uploads.length === 0) {
     return { missing: [], uploaded: [] };
   }
   
   const { imu_set: setName, group_uuid: groupUuid, missing_fragment_ids } = measurement;
   
-  // Parse set name (e.g., "32-A")
-  const [setNumber, setLetter] = setName.split('-');
-  if (!setNumber || !setLetter) {
+  // Get expected sensors for this set
+  const expectedSensors = getExpectedSensors(setName);
+  if (expectedSensors.length === 0) {
     return { missing: [], uploaded: [] };
   }
-  
-  // Map for set letters to base sensor numbers
-  const setLetterMap: Record<string, number> = {
-    'A': 768, 'B': 771, 'C': 774, 'D': 777,
-    'E': 780, 'F': 783, 'G': 786, 'H': 789
-  };
-  
-  const sensorBaseNumber = setLetterMap[setLetter] || 0;
-  if (sensorBaseNumber === 0) {
-    return { missing: [], uploaded: [] };
-  }
-  
-  // Define the expected sensors for this set
-  const expectedSensors = [
-    { type: "Left Sensor", number: sensorBaseNumber },
-    { type: "Middle Sensor", number: sensorBaseNumber + 1 },
-    { type: "Right Sensor", number: sensorBaseNumber + 2 }
-  ];
   
   // APPROACH 1: Use the missing_fragment_ids if available
   if (missing_fragment_ids && missing_fragment_ids.length > 0) {

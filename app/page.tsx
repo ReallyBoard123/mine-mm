@@ -14,12 +14,14 @@ import {
 import { DataUpload } from "@/lib/api";
 import { RefreshCw } from "lucide-react";
 import useDataStore from "@/lib/store";
-import { ConsolidatedMeasurements } from "@/components/ConsolidatedMeasurements";
+// Import the refactored component - note the simplified import path
+import ConsolidatedMeasurements from "@/components/consolidated-measurements";
 
-type DataType = "uploads" | "measurements";
+type DataType = "measurements" | "uploads";
 
 export default function Home() {
-  const [dataType, setDataType] = useState<DataType>("uploads");
+  // Changed default to "measurements" as requested
+  const [dataType, setDataType] = useState<DataType>("measurements");
   const { 
     uploadsData, 
     loading, 
@@ -47,17 +49,18 @@ export default function Home() {
       <h1 className="text-2xl font-bold mb-6">Motion Miners Data Explorer</h1>
       
       <div className="flex space-x-2 mb-6">
-        <Button 
-          variant={dataType === "uploads" ? "default" : "outline"} 
-          onClick={() => setDataType("uploads")}
-        >
-          Data Uploads
-        </Button>
+        {/* Swapped order of buttons */}
         <Button 
           variant={dataType === "measurements" ? "default" : "outline"} 
           onClick={() => setDataType("measurements")}
         >
           Consolidated Measurements
+        </Button>
+        <Button 
+          variant={dataType === "uploads" ? "default" : "outline"} 
+          onClick={() => setDataType("uploads")}
+        >
+          Data Uploads
         </Button>
       </div>
       
