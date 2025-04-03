@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ConsolidatedMeasurement } from "@/lib/api";
-import useDataStore from "@/lib/store";
+
 import {
   Table,
   TableBody,
@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PlusCircle, X, RefreshCw } from "lucide-react";
+import useDataStore from "@/lib/store";
 
 interface ShiftGroup {
   id: string;
@@ -26,13 +27,14 @@ interface ShiftGroup {
 export function ConsolidatedMeasurements() {
   const { 
     measurementsData, 
+    shiftGroups,
     loading, 
     error, 
-    fetchMeasurements, 
+    fetchMeasurements,
+    combineShifts,
     lastMeasurementsUpdate 
   } = useDataStore();
   
-  const [shiftGroups, setShiftGroups] = useState<ShiftGroup[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [combineMode, setCombineMode] = useState(false);
@@ -142,69 +144,17 @@ export function ConsolidatedMeasurements() {
   };
 
   // Combine selected shifts into a custom shift
-  const combineSelectedShifts = () => {
+  const handleCombineShifts = () => {
     if (selectedGroups.size < 2) return;
     
+    // Convert selected groups Set to array
     const selectedGroupIds = Array.from(selectedGroups);
-    const selectedGroupsData = shiftGroups.filter(group => selectedGroups.has(group.id));
     
-    // Get all measurements from selected groups
-    const allMeasurements = selectedGroupsData.flatMap(group => group.measurements);
+    // Call the store action to combine shifts
+    combineShifts(selectedGroupIds, customShiftName);
     
-    // Sort by time
-    allMeasurements.sort((a, b) => new Date(a.measurement_start).getTime() - new Date(b.measurement_start).getTime());
-    
-    // Get earliest start and latest end dates
-    const earliestStartDate = new Date(allMeasurements[0].measurement_start);
-    const latestEndDate = new Date(allMeasurements[allMeasurements.length - 1].measurement_end);
-    
-    const startDateStr = earliestStartDate.toISOString().split('T')[0];
-    const endDateStr = latestEndDate.toISOString().split('T')[0];
-    
-    // Format dates for display in the suffix
-    const startFormatted = earliestStartDate.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric'
-    });
-    
-    const endFormatted = latestEndDate.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric'
-    });
-    
-    // Format times for the suffix
-    const startTime = formatTime(earliestStartDate.toISOString());
-    const endTime = formatTime(latestEndDate.toISOString());
-    
-    // Create date range suffix
-    const dateRangeSuffix = ` (${startFormatted} ${startTime} - ${endFormatted} ${endTime})`;
-    
-    // Generate a unique ID for the combined group
-    const combinedGroupId = `combined-${Date.now()}`;
-    
-    // Create the new combined group with the suffix
-    const newGroup: ShiftGroup = {
-      id: combinedGroupId,
-      date: startDateStr,
-      endDate: endDateStr,
-      shiftType: "Custom",
-      customName: (customShiftName || `Combined Shift`) + dateRangeSuffix,
-      measurements: allMeasurements
-    };
-    
-    // Create new groups array without the selected groups
-    const updatedGroups = shiftGroups.filter(group => !selectedGroups.has(group.id));
-    
-    // Add the new combined group
-    updatedGroups.unshift(newGroup);
-    
-    // Update state
-    setShiftGroups(updatedGroups);
-    setExpandedGroups(new Set([combinedGroupId]));
+    // Reset local UI state
+    setExpandedGroups(new Set());
     setSelectedGroups(new Set());
     setCombineMode(false);
     setCustomShiftName("");
@@ -245,21 +195,13 @@ export function ConsolidatedMeasurements() {
     });
   };
 
-  // Process data into shift groups when measurements data changes
-  useEffect(() => {
-    if (measurementsData?.items && Array.isArray(measurementsData.items)) {
-      const groupedData = processIntoShifts(measurementsData.items);
-      setShiftGroups(groupedData);
-    }
-  }, [measurementsData]);
-
   // Initialize data if needed
   useEffect(() => {
-    if (!initialized && !measurementsData && !loading) {
+    if (!initialized && (!measurementsData || shiftGroups.length === 0) && !loading) {
       fetchMeasurements();
       setInitialized(true);
     }
-  }, [initialized, measurementsData, loading, fetchMeasurements]);
+  }, [initialized, measurementsData, shiftGroups, loading, fetchMeasurements]);
 
   // Get earliest start time and latest end time for a group
   const getGroupTimeRange = (group: ShiftGroup) => {
@@ -331,7 +273,7 @@ export function ConsolidatedMeasurements() {
               </div>
             )}
             
-            <Button size="sm" variant="default" onClick={combineSelectedShifts}>
+            <Button size="sm" variant="default" onClick={handleCombineShifts}>
               Combine
             </Button>
             
