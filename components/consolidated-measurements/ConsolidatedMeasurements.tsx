@@ -146,6 +146,46 @@ export function ConsolidatedMeasurements() {
           <p className="text-muted-foreground">No measurements available.</p>
         </div>
       )}
+
+      {process.env.NODE_ENV !== 'production' && (
+        <div className="mt-8 p-4 border border-dashed border-gray-300 rounded-md">
+          <h3 className="font-medium mb-2">Debug Information</h3>
+          <button 
+            onClick={() => {
+              // Log current state for debugging
+              console.log("Current shift groups:", shiftGroups);
+              console.log("Measurements data:", useDataStore.getState().measurementsData);
+              
+              // Force refresh data
+              fetchMeasurements();
+            }}
+            className="px-3 py-1 bg-gray-200 rounded text-sm mb-4"
+          >
+            Force Refresh + Debug Log
+          </button>
+          
+          <div className="text-xs overflow-auto max-h-60">
+            <div className="mb-2">Groups count: {shiftGroups.length}</div>
+            <div className="mb-2">Custom groups count: {
+              shiftGroups.filter(g => g.shiftType === "Custom").length
+            }</div>
+            <div className="mb-2">Last update: {lastUpdate}</div>
+            <div className="mb-2 font-semibold">Combined Shift Statuses:</div>
+            <ul className="list-disc pl-4 space-y-1">
+              {shiftGroups
+                .filter(g => g.shiftType === "Custom")
+                .flatMap(g => g.measurements)
+                .map((m, i) => (
+                  <li key={i} className={m.has_error ? "text-red-500" : "text-green-500"}>
+                    {m.imu_set}: {m.has_error ? "Failed" : "Success"} 
+                    (UUID: {m.uuid?.substring(0, 8)})
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -70,20 +70,68 @@ const useDataStore = create<DataState>()(
         
         try {
           const response = await fetchConsolidatedMeasurements();
+          
           set(state => {
-            // Process data into shift groups, preserving any custom groups
+            // First, collect all measurements with their unique identifiers
+            // We'll use a composite key since UUID alone might not be sufficient
+            const freshMeasurements = new Map<string, ConsolidatedMeasurement>();
+            
+            response.items.forEach((measurement: ConsolidatedMeasurement) => {
+              // Create a composite key using imu_set and timestamps
+              const key = `${measurement.imu_set}:${measurement.measurement_start}:${measurement.measurement_end}`;
+              freshMeasurements.set(key, measurement);
+              
+              // Also index by UUID as a fallback
+              if (measurement.uuid) {
+                freshMeasurements.set(measurement.uuid, measurement);
+              }
+            });
+            
+            // Process new measurements into standard groups
             const newGroups = state.processIntoShifts(response.items);
             
-            // Find any custom groups that should be kept
-            const customGroups = state.shiftGroups.filter(group => 
-              group.shiftType === "Custom"
-            );
+            // Update existing custom groups with fresh measurement data
+            const updatedCustomGroups = state.shiftGroups
+              .filter(group => group.shiftType === "Custom")
+              .map(group => {
+                // Replace measurements with fresh data where possible
+                const updatedMeasurements = group.measurements.map(oldMeasurement => {
+                  // Try to find by composite key first
+                  const compositeKey = `${oldMeasurement.imu_set}:${oldMeasurement.measurement_start}:${oldMeasurement.measurement_end}`;
+                  
+                  // First try the composite key
+                  if (freshMeasurements.has(compositeKey)) {
+                    return freshMeasurements.get(compositeKey)!;
+                  }
+                  
+                  // Then try by UUID
+                  if (oldMeasurement.uuid && freshMeasurements.has(oldMeasurement.uuid)) {
+                    return freshMeasurements.get(oldMeasurement.uuid)!;
+                  }
+                  
+                  // Try finding by set name and timestamps
+                  for (const measurement of response.items) {
+                    if (measurement.imu_set === oldMeasurement.imu_set &&
+                        measurement.measurement_start === oldMeasurement.measurement_start &&
+                        measurement.measurement_end === oldMeasurement.measurement_end) {
+                      return measurement;
+                    }
+                  }
+                  
+                  // If nothing matched, keep the old measurement
+                  return oldMeasurement;
+                });
+                
+                return {
+                  ...group,
+                  measurements: updatedMeasurements
+                };
+              });
             
-            // Sort all groups by start date - newest first
-            const allGroups = [...customGroups, ...newGroups].sort((a, b) => {
-              // For custom groups with custom names, extract dates from the name if possible
+            // Merge and sort all groups
+            const allGroups = [...updatedCustomGroups, ...newGroups].sort((a, b) => {
+              // Custom sorting logic for dates
               if (a.shiftType === "Custom" && b.shiftType === "Custom") {
-                // Try to extract date from customName first, fall back to date property
                 const aDateMatches = a.customName?.match(/\w+, (\w+ \d+, \d+)/);
                 const bDateMatches = b.customName?.match(/\w+, (\w+ \d+, \d+)/);
                 
@@ -93,9 +141,15 @@ const useDataStore = create<DataState>()(
                 return bDate.getTime() - aDate.getTime();
               }
               
-              // For standard comparison, use the date property
               return new Date(b.date).getTime() - new Date(a.date).getTime();
             });
+            
+            // For debugging
+            console.log("Updated measurements in custom groups:", 
+              updatedCustomGroups.flatMap(g => g.measurements).map(m => 
+                `${m.imu_set}: ${m.has_error ? 'Error' : 'Success'}`
+              )
+            );
             
             return { 
               measurementsData: response, 
